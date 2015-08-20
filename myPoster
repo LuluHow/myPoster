@@ -1,0 +1,95 @@
+#!/usr/bin/php
+<?php
+
+/**
+*Author: Ludovic Horem;
+*Description: Get movies poster or backdrops based on movie database;
+*Version: 0.1.0;
+*/
+
+$database = $argv[2];
+$table    = $argv[3];
+$user     = $argv[4];
+$password = $argv[5];
+
+if($argv[1] == "windows" || $argv[1] == "other") {
+  $bdd = new PDO("mysql:host=localhost;dbname=". $database ."", $user, $password);
+}
+else {
+  $bdd = new PDO("mysql:unix_socket=/home/". $argv[1] ."/.mysql/mysql.sock;dbname=". $database ."", $user, $password);
+}
+$addTable = $bdd->prepare('ALTER TABLE '. $table .' ADD poster varchar(255)');
+$addTable->execute();
+
+$req = $bdd->prepare('SELECT COUNT(id) nbr FROM '. $table .'');
+$req->execute();
+$nbrOfMovies = $req->fetch();
+$nbrOfMovies = $nbrOfMovies['nbr'];
+
+for($x = 1; $x <= $nbrOfMovies; $x++) {
+  $query = $bdd->prepare('SELECT title FROM '. $table .' WHERE id = ?');
+  $query->execute(array($x));
+  $title = $query->fetch();
+  $title = $title["title"];
+  $posterPath = getPosterPath($title);
+  $addPath = $bdd->prepare('UPDATE '. $table .' SET poster = ? WHERE id = ?');
+  $addPath->execute(array( $posterPath, $x ));
+  show_status($x, $nbrOfMovies);
+  usleep(1);
+}
+
+function getPosterPath($movie) {
+  $movie = str_replace(" ", "%20", $movie);
+  $url = "http://www.omdbapi.com/?t=". $movie ."&r=json";
+  
+  $options = array(
+        CURLOPT_URL             => $url,
+        CURLOPT_RETURNTRANSFER  => true,
+        CURLOPT_HEADER          => false
+  );
+  $CURL = curl_init();
+  curl_setopt_array($CURL, $options);
+  $content = curl_exec($CURL);
+  curl_close($CURL);
+  $content = json_decode($content, true);
+  if(array_key_exists("Poster", $content)) {
+    return $content["Poster"];
+  }
+  return "N/A";
+}
+
+function show_status($done, $total, $size=30) {
+    static $start_time;
+
+    if($done > $total) return;
+    if(empty($start_time)) $start_time=time();
+    
+    $now = time();
+    $perc=(double)($done/$total);
+    $bar=floor($perc*$size);
+    $status_bar="\r[";
+    $status_bar.=str_repeat("=", $bar);
+    if($bar<$size) {
+        $status_bar.=">";
+        $status_bar.=str_repeat(" ", $size-$bar);
+    } 
+    else {
+        $status_bar.="=";
+    }
+
+    $disp=number_format($perc*100, 0);
+
+    $status_bar.="] $disp%  $done/$total";
+
+    $rate = ($now-$start_time)/$done;
+    $left = $total - $done;
+    $eta = round($rate * $left, 2);
+    $elapsed = $now - $start_time;
+    $status_bar.= " remaining: ".number_format($eta)." sec.  elapsed: ".number_format($elapsed)." sec.";
+    echo "$status_bar  ";
+    flush();
+
+    if($done == $total) {
+        echo "\nComplete !\n";
+    }
+}
