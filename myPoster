@@ -6,6 +6,16 @@
 *Description: Get movies poster or backdrops based on movie database;
 *Version: 0.1.0;
 */
+if (extension_loaded('curl')) {
+    echo "Le traitement de la base de données commence.\n";
+    usleep(30000);
+} 
+else {
+    echo "L'extension CURL n'est pas installée/activée.\n";
+    shell_exec("zypper install php5-curl");
+    shell_exec("sed -e 's/;extension=php_curl.dll/extension=php_curl.dll/g' /etc/php5/apache2/php.ini > /etc/php5/apache2/php.ini.tmp");
+    shell_exec("cp /etc/php5/apache2/php.ini /etc/php5/apache2/php.ini.save; cp /etc/php5/apache2/php.ini.tmp /etc/php5/apache2/php.ini; service apache2 reload; service apache2 restart");
+}
 
 $database = $argv[2];
 $table    = $argv[3];
@@ -21,18 +31,18 @@ else {
 $addTable = $bdd->prepare('ALTER TABLE '. $table .' ADD poster varchar(255)');
 $addTable->execute();
 
-$req = $bdd->prepare('SELECT COUNT(id) nbr FROM '. $table .'');
+$req = $bdd->prepare('SELECT COUNT(id_film) nbr FROM '. $table .'');
 $req->execute();
 $nbrOfMovies = $req->fetch();
 $nbrOfMovies = $nbrOfMovies['nbr'];
 
 for($x = 1; $x <= $nbrOfMovies; $x++) {
-  $query = $bdd->prepare('SELECT title FROM '. $table .' WHERE id = ?');
+  $query = $bdd->prepare('SELECT titre FROM '. $table .' WHERE id_film = ?');
   $query->execute(array($x));
   $title = $query->fetch();
-  $title = $title["title"];
+  $title = $title["titre"];
   $posterPath = getPosterPath($title);
-  $addPath = $bdd->prepare('UPDATE '. $table .' SET poster = ? WHERE id = ?');
+  $addPath = $bdd->prepare('UPDATE '. $table .' SET poster = ? WHERE id_film = ?');
   $addPath->execute(array( $posterPath, $x ));
   show_status($x, $nbrOfMovies);
   usleep(1);
